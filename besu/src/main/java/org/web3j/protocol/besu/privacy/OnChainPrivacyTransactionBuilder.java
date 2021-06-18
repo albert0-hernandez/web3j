@@ -23,8 +23,10 @@ import org.web3j.abi.datatypes.DynamicArray;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.generated.Bytes32;
 import org.web3j.crypto.Credentials;
+import org.web3j.crypto.signer.Signer;
 import org.web3j.protocol.eea.crypto.PrivateTransactionEncoder;
 import org.web3j.protocol.eea.crypto.RawPrivateTransaction;
+import org.web3j.tx.PrivateTransactionManager;
 import org.web3j.tx.gas.BesuPrivacyGasProvider;
 import org.web3j.utils.Base64String;
 import org.web3j.utils.Numeric;
@@ -37,17 +39,27 @@ public class OnChainPrivacyTransactionBuilder {
     public static final String OnChainPrivacyPrecompiledContract =
             "0x000000000000000000000000000000000000007c";
 
-    private final long chainId;
-    private final BesuPrivacyGasProvider gasProvider;
-    private final Restriction restriction;
+    protected final long chainId;
+    protected final BesuPrivacyGasProvider gasProvider;
+    protected final Restriction restriction;
+    private final Signer signer;
 
     public OnChainPrivacyTransactionBuilder(
             final long chainId,
             final BesuPrivacyGasProvider gasProvider,
             final Restriction restriction) {
+        this(chainId, gasProvider, restriction, null);
+    }
+
+    public OnChainPrivacyTransactionBuilder(
+            final long chainId,
+            final BesuPrivacyGasProvider gasProvider,
+            final Restriction restriction,
+            final Signer signer) {
         this.chainId = chainId;
         this.gasProvider = gasProvider;
         this.restriction = restriction;
+        this.signer = signer;
     }
 
     public OnChainPrivacyTransactionBuilder() {
@@ -98,7 +110,13 @@ public class OnChainPrivacyTransactionBuilder {
                         privacyGroupId,
                         restriction);
 
-        return Numeric.toHexString(
-                PrivateTransactionEncoder.signMessage(rawTransaction, chainId, credentials));
+        if (signer == null) {
+            return Numeric.toHexString(
+                    PrivateTransactionEncoder.signMessage(rawTransaction, chainId, credentials));
+        } else {
+            return Numeric.toHexString(
+                    PrivateTransactionManager.signMessageWithChainId(
+                            rawTransaction, chainId, signer));
+        }
     }
 }

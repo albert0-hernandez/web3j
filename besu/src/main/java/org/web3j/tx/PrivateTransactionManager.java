@@ -20,6 +20,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.web3j.crypto.Credentials;
+import org.web3j.crypto.Sign;
+import org.web3j.crypto.TransactionEncoder;
+import org.web3j.crypto.signer.DefaultSigner;
+import org.web3j.crypto.signer.Signer;
 import org.web3j.protocol.besu.Besu;
 import org.web3j.protocol.besu.response.privacy.PrivateEnclaveKey;
 import org.web3j.protocol.core.DefaultBlockParameter;
@@ -48,8 +52,9 @@ public abstract class PrivateTransactionManager extends TransactionManager {
     private final Besu besu;
     private final BesuPrivacyGasProvider gasProvider;
     private final Credentials credentials;
-    private final long chainId;
+    protected final long chainId;
     private final Base64String privateFrom;
+    private final Signer signer;
 
     protected PrivateTransactionManager(
             final Besu besu,
@@ -65,6 +70,7 @@ public abstract class PrivateTransactionManager extends TransactionManager {
         this.chainId = chainId;
         this.privateFrom = privateFrom;
         this.transactionReceiptProcessor = transactionReceiptProcessor;
+        this.signer = new DefaultSigner(credentials);
     }
 
     protected PrivateTransactionManager(
@@ -100,6 +106,23 @@ public abstract class PrivateTransactionManager extends TransactionManager {
                         besu, DEFAULT_POLLING_FREQUENCY, DEFAULT_POLLING_ATTEMPTS_PER_TX_HASH));
     }
 
+    protected PrivateTransactionManager(
+            final Besu besu,
+            final BesuPrivacyGasProvider gasProvider,
+            final Signer signer,
+            final long chainId,
+            final Base64String privateFrom,
+            final PrivateTransactionReceiptProcessor transactionReceiptProcessor) {
+        super(transactionReceiptProcessor, signer.getAddress());
+        this.besu = besu;
+        this.gasProvider = gasProvider;
+        this.credentials = Credentials.createEmptyCredentials(signer.getAddress());
+        this.chainId = chainId;
+        this.privateFrom = privateFrom;
+        this.transactionReceiptProcessor = transactionReceiptProcessor;
+        this.signer = signer;
+    }
+
     @Override
     protected TransactionReceipt executeTransaction(
             BigInteger gasPrice, BigInteger gasLimit, String to, String data, BigInteger value)
@@ -130,7 +153,7 @@ public abstract class PrivateTransactionManager extends TransactionManager {
             throws IOException {
 
         final BigInteger nonce =
-                besu.privGetTransactionCount(credentials.getAddress(), getPrivacyGroupId())
+                besu.privGetTransactionCount(signer.getAddress(), getPrivacyGroupId())
                         .send()
                         .getTransactionCount();
 
@@ -174,7 +197,7 @@ public abstract class PrivateTransactionManager extends TransactionManager {
             boolean constructor)
             throws IOException {
         final BigInteger nonce =
-                besu.privGetTransactionCount(credentials.getAddress(), getPrivacyGroupId())
+                besu.privGetTransactionCount(signer.getAddress(), getPrivacyGroupId())
                         .send()
                         .getTransactionCount();
 
@@ -253,13 +276,30 @@ public abstract class PrivateTransactionManager extends TransactionManager {
         byte[] signedMessage;
 
         if (chainId > ChainIdLong.NONE) {
-            signedMessage =
-                    PrivateTransactionEncoder.signMessage(rawTransaction, chainId, credentials);
+            signedMessage = signMessageWithChainId(rawTransaction, chainId, signer);
         } else {
-            signedMessage = PrivateTransactionEncoder.signMessage(rawTransaction, credentials);
+            signedMessage = signMessageWithoutChainId(rawTransaction);
         }
 
         return Numeric.toHexString(signedMessage);
+    }
+
+    public static byte[] signMessageWithChainId(
+            RawPrivateTransaction rawTransaction, final long chainId, final Signer signer) {
+        final byte[] encodedTransaction = PrivateTransactionEncoder.encode(rawTransaction, chainId);
+
+        final Sign.SignatureData signatureData = signer.sign(encodedTransaction);
+
+        final Sign.SignatureData eip155SignatureData =
+                TransactionEncoder.createEip155SignatureData(signatureData, chainId);
+        return PrivateTransactionEncoder.encode(rawTransaction, eip155SignatureData);
+    }
+
+    private byte[] signMessageWithoutChainId(RawPrivateTransaction rawTransaction) {
+        final byte[] encodedTransaction = PrivateTransactionEncoder.encode(rawTransaction);
+        final Sign.SignatureData signatureData = signer.sign(encodedTransaction);
+
+        return PrivateTransactionEncoder.encode(rawTransaction, signatureData);
     }
 
     public EthSendTransaction signAndSend(RawPrivateTransaction rawTransaction) throws IOException {

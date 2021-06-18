@@ -18,7 +18,10 @@ import java.math.BigInteger;
 import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Hash;
 import org.web3j.crypto.RawTransaction;
+import org.web3j.crypto.Sign;
 import org.web3j.crypto.TransactionEncoder;
+import org.web3j.crypto.signer.DefaultSigner;
+import org.web3j.crypto.signer.Signer;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
@@ -44,6 +47,7 @@ public class RawTransactionManager extends TransactionManager {
 
     private final Web3j web3j;
     final Credentials credentials;
+    private final Signer signer;
 
     private final long chainId;
 
@@ -56,6 +60,8 @@ public class RawTransactionManager extends TransactionManager {
         this.credentials = credentials;
 
         this.chainId = chainId;
+
+        this.signer = new DefaultSigner(credentials);
     }
 
     public RawTransactionManager(
@@ -69,6 +75,8 @@ public class RawTransactionManager extends TransactionManager {
         this.credentials = credentials;
 
         this.chainId = chainId;
+
+        this.signer = new DefaultSigner(credentials);
     }
 
     public RawTransactionManager(
@@ -77,6 +85,19 @@ public class RawTransactionManager extends TransactionManager {
 
         this.web3j = web3j;
         this.credentials = credentials;
+
+        this.chainId = chainId;
+
+        this.signer = new DefaultSigner(credentials);
+    }
+
+    public RawTransactionManager(
+            Web3j web3j, Signer signer, long chainId, int attempts, long sleepDuration) {
+        super(web3j, attempts, sleepDuration, signer.getAddress());
+
+        this.web3j = web3j;
+        this.credentials = Credentials.createEmptyCredentials(signer.getAddress());
+        this.signer = signer;
 
         this.chainId = chainId;
     }
@@ -174,12 +195,29 @@ public class RawTransactionManager extends TransactionManager {
         byte[] signedMessage;
 
         if (chainId > ChainId.NONE) {
-            signedMessage = TransactionEncoder.signMessage(rawTransaction, chainId, credentials);
+            signedMessage = signMessageWithChainId(rawTransaction);
         } else {
-            signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
+            signedMessage = signMessageWithoutChainId(rawTransaction);
         }
 
         return Numeric.toHexString(signedMessage);
+    }
+
+    private byte[] signMessageWithChainId(RawTransaction rawTransaction) {
+        final byte[] encodedTransaction = TransactionEncoder.encode(rawTransaction, chainId);
+
+        final Sign.SignatureData signatureData = signer.sign(encodedTransaction);
+
+        final Sign.SignatureData eip155SignatureData =
+                TransactionEncoder.createEip155SignatureData(signatureData, chainId);
+        return TransactionEncoder.encode(rawTransaction, eip155SignatureData);
+    }
+
+    private byte[] signMessageWithoutChainId(RawTransaction rawTransaction) {
+        final byte[] encodedTransaction = TransactionEncoder.encode(rawTransaction);
+        final Sign.SignatureData signatureData = signer.sign(encodedTransaction);
+
+        return TransactionEncoder.encode(rawTransaction, signatureData);
     }
 
     public EthSendTransaction signAndSend(RawTransaction rawTransaction) throws IOException {

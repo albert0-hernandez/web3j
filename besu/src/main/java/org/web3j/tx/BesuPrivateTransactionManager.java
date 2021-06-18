@@ -13,8 +13,10 @@
 package org.web3j.tx;
 
 import org.web3j.crypto.Credentials;
+import org.web3j.crypto.signer.Signer;
 import org.web3j.protocol.besu.Besu;
 import org.web3j.tx.gas.BesuPrivacyGasProvider;
+import org.web3j.tx.response.PrivateTransactionReceiptProcessor;
 import org.web3j.utils.Base64String;
 
 /** PrivateTransactionManager implementation for using a Besu node to transact. */
@@ -43,6 +45,18 @@ public class BesuPrivateTransactionManager extends PrivateTransactionManager {
             final Base64String privateFrom,
             final Base64String privacyGroupId) {
         super(besu, gasProvider, credentials, chainId, privateFrom);
+        this.privacyGroupId = privacyGroupId;
+    }
+
+    public BesuPrivateTransactionManager(
+            final Besu besu,
+            final BesuPrivacyGasProvider gasProvider,
+            final Signer signer,
+            final long chainId,
+            final Base64String privateFrom,
+            final PrivateTransactionReceiptProcessor transactionReceiptProcessor,
+            final Base64String privacyGroupId) {
+        super(besu, gasProvider, signer, chainId, privateFrom, transactionReceiptProcessor);
         this.privacyGroupId = privacyGroupId;
     }
 

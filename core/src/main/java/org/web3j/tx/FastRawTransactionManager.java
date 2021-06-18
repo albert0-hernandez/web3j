@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 
 import org.web3j.crypto.Credentials;
+import org.web3j.crypto.signer.Signer;
 import org.web3j.protocol.Web3j;
 import org.web3j.tx.response.TransactionReceiptProcessor;
 
@@ -48,6 +49,17 @@ public class FastRawTransactionManager extends RawTransactionManager {
             long chainId,
             TransactionReceiptProcessor transactionReceiptProcessor) {
         super(web3j, credentials, chainId, transactionReceiptProcessor);
+    }
+
+    public FastRawTransactionManager(
+            final Web3j web3j,
+            final Signer signer,
+            final long chainId,
+            final int attempts,
+            final long sleepDuration,
+            final BigInteger nonce) {
+        super(web3j, signer, chainId, attempts, sleepDuration);
+        this.nonce = nonce;
     }
 
     @Override
